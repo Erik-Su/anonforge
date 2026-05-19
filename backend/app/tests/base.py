@@ -6,11 +6,10 @@ from types import ModuleType
 from fastapi.testclient import TestClient
 import pytest
 
-from app.main import create_app
 
 class EnvTestBase:
     """关于环境的测试基类
-    
+
     """
     def set_env(self, monkeypatch: pytest.MonkeyPatch, values: dict[str, str]) -> None:
         for key, value in values.items():
@@ -18,11 +17,12 @@ class EnvTestBase:
 
     def reload_modules(self, *modules: ModuleType) -> tuple[ModuleType, ...]:
         return tuple(importlib.reload(module) for module in modules)
-    
+
 
 class ApiTestBase:
     """关于API接口的测试基类
-    
+
     """
     def create_client(self) -> TestClient:
+        from app.main import create_app
         return TestClient(create_app())

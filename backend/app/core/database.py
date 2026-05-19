@@ -58,7 +58,6 @@ async def drop_db_and_tables() -> None:
     async with get_engine().begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
 
-
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """为 FastAPI 依赖项提供异步数据库会话。"""
     async with get_session_maker()() as session:
