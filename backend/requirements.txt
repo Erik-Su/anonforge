@@ -5,3 +5,8 @@ pydantic
 pillow
 httpx
 crewai
+
+# testing
+pytest
+pytest-asyncio
+aiosqlite
