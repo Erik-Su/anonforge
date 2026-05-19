@@ -1,14 +1,16 @@
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import path from "node:path";
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from "node:path"
 
+// https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  // 使用@代表 "frontend/src"
+  resolve: { alias: {"@": path.resolve(__dirname, "src") } },
   server: {
     proxy: {
-      "/api": "http://127.0.0.1:8899",
-      "/oss": "http://127.0.0.1:8899",
+      "/api": "http://127.0.0.1:8088/api",
+      "/oss": "http://127.0.0.1:8088/oss",
     },
   },
-});
+})

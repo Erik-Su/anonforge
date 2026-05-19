@@ -1,0 +1,86 @@
+# ===========================
+# Python / FastAPI (Backend)
+# ===========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# mypy / pyright
+.mypy_cache/
+.dmypy.json
+pyrightconfig.json
+
+# ===========================
+# Node / Vue3 / Vite (Frontend)
+# ===========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# pnpm / npm / yarn
+.pnpm-store/
+.npm/
+.yarn/
+
+# Vite cache
+.vite/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# ===========================
+# Environment & Secrets
+# ===========================
+.env
+.env.*
+!.env.example
+
+# ===========================
+# Docker volumes / local data
+# ===========================
+/docker/*/data/
+
+# ===========================
+# Database
+# ===========================
+*.db
+*.sqlite
+*.sqlite3
+
+
+# ===========================
+# IDE & Editor
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/
