@@ -29,7 +29,7 @@ def build_database_url(
         str: 可用于 SQLModel/SQLAlchemy 的数据库连接 URL。
     """
     if db_engine.lower() == "sqlite":
-        return f"sqlite:///{db_sqlite_path}"
+        return f"sqlite+{db_driver}:///{db_sqlite_path}"
 
     return f"{db_engine.lower()}+{db_driver}://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
