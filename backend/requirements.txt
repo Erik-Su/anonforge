@@ -10,3 +10,5 @@ crewai
 pytest
 pytest-asyncio
 aiosqlite
+
+alembic
