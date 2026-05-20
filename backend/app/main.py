@@ -7,6 +7,7 @@ if sys.platform.startswith("win"):
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers.api import api_router
@@ -33,6 +34,14 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         description=settings.app_description,
         lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     app.include_router(api_router)
