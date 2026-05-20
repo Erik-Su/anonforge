@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import Enum
 from typing import Any
 
 from fastapi import APIRouter
+from fastapi.params import Depends as DependsParam
 
 
 def route(
     path: str,
     *,
     methods: list[str],
+    middlewares: Sequence[DependsParam] | None = None,
     **kwargs: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """为类视图方法声明路由元数据。
@@ -18,6 +20,7 @@ def route(
     Args:
         path: 路由相对路径。
         methods: HTTP 方法列表。
+        middlewares: 路由级中间件列表，按 FastAPI 依赖项方式声明。
         **kwargs: 透传给 `APIRouter.add_api_route` 的其他配置。
 
     Returns:
@@ -26,13 +29,19 @@ def route(
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         """将路由元数据挂载到方法对象上。"""
+        route_kwargs = dict(kwargs)
+        if middlewares is not None:
+            dependencies = list(route_kwargs.get("dependencies") or [])
+            dependencies.extend(middlewares)
+            route_kwargs["dependencies"] = dependencies
+
         setattr(
             func,
             "__route_config__",
             {
                 "path": path,
                 "methods": methods,
-                **kwargs,
+                **route_kwargs,
             },
         )
         return func
@@ -44,7 +53,7 @@ class BaseView:
     """类视图基类。"""
 
     router_prefix = ""
-    router_tags: list[str | Enum] = []  # 子类应覆盖此属性而非 append
+    router_tags: list[str | Enum] = []
 
     def __init__(self) -> None:
         """初始化类视图对应的路由器并自动注册已声明路由。"""

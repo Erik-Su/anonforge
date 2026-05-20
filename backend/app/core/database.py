@@ -6,7 +6,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.utils.string_tools import build_database_url
-
+from redis.asyncio import Redis
 
 def build_engine() -> AsyncEngine:
     """根据当前配置构建异步数据库引擎。
@@ -62,3 +62,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """为 FastAPI 依赖项提供异步数据库会话。"""
     async with get_session_maker()() as session:
         yield session
+
+redis_client = Redis(
+    host=settings.redis_host,
+    port=settings.redis_port,
+    db=settings.redis_db,
+    decode_responses=True,
+)

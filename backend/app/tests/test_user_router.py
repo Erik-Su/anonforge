@@ -141,3 +141,97 @@ class TestDeleteUser:
     async def test_returns_404_when_not_found(self, api_client: httpx.AsyncClient) -> None:
         response = await api_client.delete(f"{BASE}/no-such-id")
         assert response.status_code == 404
+
+
+class TestLoginUser:
+    async def test_login_success(self, api_client: httpx.AsyncClient, saved_user: User) -> None:
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": saved_user.username, "password": "password123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["token_type"] == "bearer"
+        assert "expires_in" in data
+        assert data["user"]["username"] == saved_user.username
+
+    async def test_returns_401_on_wrong_password(self, api_client: httpx.AsyncClient, saved_user: User) -> None:
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": saved_user.username, "password": "wrongpassword"},
+        )
+        assert response.status_code == 401
+
+    async def test_returns_401_on_nonexistent_user(self, api_client: httpx.AsyncClient) -> None:
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": "ghostuser", "password": "password123"},
+        )
+        assert response.status_code == 401
+
+    async def test_returns_403_when_user_disabled(self, api_client: httpx.AsyncClient, saved_user: User) -> None:
+        await api_client.patch(f"{BASE}/{saved_user.public_id}/disable")
+
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": saved_user.username, "password": "password123"},
+        )
+        assert response.status_code == 403
+
+    async def test_response_excludes_password_hash(self, api_client: httpx.AsyncClient, saved_user: User) -> None:
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": saved_user.username, "password": "password123"},
+        )
+        data = response.json()
+        assert "password_hash" not in data
+        assert "password_hash" not in data.get("user", {})
+
+    async def test_returns_422_on_missing_fields(self, api_client: httpx.AsyncClient) -> None:
+        response = await api_client.post(BASE + "/login", json={})
+        assert response.status_code == 422
+
+    async def test_returns_422_on_short_password(self, api_client: httpx.AsyncClient) -> None:
+        response = await api_client.post(
+            BASE + "/login",
+            json={"username": "someuser", "password": "short"},
+        )
+        assert response.status_code == 422
+
+
+class TestAuthRequired:
+    """验证受保护路由在无 Bearer token 时返回 401。"""
+
+    async def test_list_users_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.get(BASE + "/")
+        assert response.status_code == 401
+
+    async def test_get_user_detail_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.get(f"{BASE}/some-id")
+        assert response.status_code == 401
+
+    async def test_create_user_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.post(BASE + "/", json=make_create_payload())
+        assert response.status_code == 401
+
+    async def test_update_user_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.put(f"{BASE}/some-id", json={"username": "x"})
+        assert response.status_code == 401
+
+    async def test_disable_user_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.patch(f"{BASE}/some-id/disable")
+        assert response.status_code == 401
+
+    async def test_delete_user_requires_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.delete(f"{BASE}/some-id")
+        assert response.status_code == 401
+
+    async def test_login_does_not_require_auth(self, raw_api_client: httpx.AsyncClient) -> None:
+        response = await raw_api_client.post(
+            BASE + "/login",
+            json={"username": "ghost", "password": "password123"},
+        )
+        assert response.status_code == 401
+        assert response.json()["detail"] == "用户名或密码错误"

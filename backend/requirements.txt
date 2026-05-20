@@ -11,4 +11,10 @@ pytest
 pytest-asyncio
 aiosqlite
 
+#database
 alembic
+psycopg[binary]
+redis
+
+PyJWT
+bcrypt

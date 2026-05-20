@@ -1,26 +1,27 @@
-import sys
 import asyncio
+import sys
 
-# fastAPI+uvicorn在windows系统下异步运行时，会经常出现端口冲突，修改事件循环机制可以解决。
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
 from app.core.config import settings
 from app.routers.api import api_router
+from app.services.user import ensure_default_admin
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """在应用启动时完成一些初始化操作，例如：数据库连接，启动一些后台任务之类的。
+    """应用生命周期钩子。
+
+    启动时创建数据库表，并确保系统中存在默认管理员用户。
     """
-    # yield之前的代码，属于App创建之前执行[只需要在项目开始前执行一次的操作，初始化数据库等外部链接，]
-    print("yield之前")
+    await ensure_default_admin()
     yield
-    # yield之后的代码，属于App关闭之后执行[记录并回收资源]
-    print("yield之后")
+
 
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用实例。
@@ -31,11 +32,12 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         description=settings.app_description,
-        lifespan=lifespan
+        lifespan=lifespan,
     )
 
     app.include_router(api_router)
 
     return app
+
 
 app = create_app()

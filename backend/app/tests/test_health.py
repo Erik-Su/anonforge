@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from app.tests.base import ApiTestBase
+import httpx
 
 
-class TestMainApi(ApiTestBase):
-    def test_health_endpoint_returns_ok(self) -> None:
-        with self.create_client() as client:
-            response = client.get("/api/health")
-
+class TestMainApi:
+    async def test_health_endpoint_returns_ok(self, api_client: httpx.AsyncClient) -> None:
+        response = await api_client.get("/api/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}

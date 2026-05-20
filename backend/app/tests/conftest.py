@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -12,9 +14,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 import app.models.user  # noqa: F401 — 注册 SQLModel metadata
 from app.core.database import get_session
 from app.main import create_app
+from app.middlewares import common
 from app.models.user import User
 from app.utils.string_tools import hash_password
 from app.utils.time_tools import utc_now
+
+
+@pytest.fixture(autouse=True, scope="session")
+def mock_redis() -> AsyncMock:
+    redis_mock = AsyncMock()
+    redis_mock.set = AsyncMock(return_value=True)
+    redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.delete = AsyncMock(return_value=1)
+    with patch("app.core.database.redis_client", redis_mock):
+        yield redis_mock
 
 
 @pytest_asyncio.fixture
@@ -39,6 +52,29 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def api_client(engine: AsyncEngine) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """绕过 JWT 校验的客户端，用于测试业务逻辑。"""
+    maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
+        async with maker() as session:
+            yield session
+
+    async def mock_jwt_auth() -> None:
+        pass
+
+    application = create_app()
+    application.dependency_overrides[get_session] = override_get_session
+    application.dependency_overrides[common.jwt_auth_middleware] = mock_jwt_auth
+
+    with patch("app.main.ensure_default_admin", new_callable=AsyncMock):
+        transport = httpx.ASGITransport(app=application)  # type: ignore[arg-type]
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+
+
+@pytest_asyncio.fixture
+async def raw_api_client(engine: AsyncEngine) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """保留真实 JWT 校验的客户端，用于测试鉴权行为。"""
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -48,9 +84,10 @@ async def api_client(engine: AsyncEngine) -> AsyncGenerator[httpx.AsyncClient, N
     application = create_app()
     application.dependency_overrides[get_session] = override_get_session
 
-    transport = httpx.ASGITransport(app=application)  # type: ignore[arg-type]
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    with patch("app.main.ensure_default_admin", new_callable=AsyncMock):
+        transport = httpx.ASGITransport(app=application)  # type: ignore[arg-type]
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
 
 @pytest_asyncio.fixture
