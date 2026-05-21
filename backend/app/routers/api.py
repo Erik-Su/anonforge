@@ -1,9 +1,12 @@
 from fastapi import APIRouter
 
 from app.core.config import settings
+from app.routers.project import router as project_router
 from app.routers.user import router as user_router
 
 api_router = APIRouter(prefix=settings.api_prefix)
+
+api_router.include_router(project_router)
 api_router.include_router(user_router)
 
 @api_router.get(

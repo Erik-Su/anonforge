@@ -12,6 +12,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.models.user  # noqa: F401 — 注册 SQLModel metadata
+import app.models.project  # noqa: F401
 from app.core.database import get_session
 from app.main import create_app
 from app.middlewares import common
