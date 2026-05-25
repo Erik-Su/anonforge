@@ -580,7 +580,7 @@
                   :model-value="modesAsStrings(model)"
                   popper-class="settings-dark-select"
                   placeholder="选择 1 个或多个模式"
-                  @update:model-value="modeSelectChangeHandler(model)"
+                  @update:model-value="onModesSelectChange(model, $event)"
                 >
                   <el-option
                     v-for="opt in (model.model_type === 'image' ? IMAGE_MODE_OPTIONS : VIDEO_MODE_OPTIONS)"
@@ -760,6 +760,13 @@
             </div>
             <div class="provider-form__head-actions">
               <el-button
+                class="ghost-btn"
+                size="small"
+                @click="openProviderCodeEditor"
+              >
+                Web编辑器
+              </el-button>
+              <el-button
                 v-if="providerDialogMode === 'create'"
                 class="ghost-btn"
                 size="small"
@@ -807,6 +814,27 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="providerCodeEditorVisible"
+      title="服务文件源码 Web编辑器"
+      width="min(1180px, 96vw)"
+      top="4vh"
+      append-to-body
+      destroy-on-close
+      :close-on-click-modal="false"
+      class="settings-dark-dialog provider-code-web-dialog"
+    >
+      <ProviderCodeWebEditor v-model="providerCodeEditorDraft" />
+
+      <template #footer>
+        <el-button class="ghost-btn" @click="providerCodeEditorVisible = false">取消</el-button>
+        <el-button class="ghost-btn" @click="syncProviderCodeEditorDraft">同步到源码框</el-button>
+        <el-button type="primary" :loading="providerCodeSaving" @click="saveProviderCodeEditor">
+          {{ providerCodeEditorSaveLabel }}
+        </el-button>
+      </template>
+    </el-dialog>
   </el-dialog>
 </template>
 
@@ -840,6 +868,7 @@ import {
   type ProviderModel,
   type ProviderModelType,
 } from '../api/modelProvider'
+import ProviderCodeWebEditor from './ProviderCodeWebEditor.vue'
 
 const visible = defineModel<boolean>({ default: false })
 const router = useRouter()
@@ -1254,6 +1283,11 @@ const providerDialogVisible = ref(false)
 const providerDialogMode = ref<'create' | 'edit'>('create')
 const providerEditingKey = ref('')
 const providerFormRef = ref<FormInstance>()
+const providerCodeEditorVisible = ref(false)
+const providerCodeEditorDraft = ref('')
+const providerCodeEditorSaveLabel = computed(() =>
+  providerDialogMode.value === 'edit' ? '保存源码' : '保存并同步',
+)
 
 const MODEL_TYPE_OPTIONS: { label: string; value: ProviderModelType }[] = [
   { label: '文本', value: 'text' },
@@ -1284,6 +1318,7 @@ const IMAGE_MODE_OPTIONS = [
 const VIDEO_MODE_OPTIONS = [
   { label: '文生视频', value: 'text' },
   { label: '单图首帧', value: 'singleImage' },
+  { label: '多图参考', value: 'multiReference' },
   { label: '首尾帧双图', value: 'startEndRequired' },
   { label: '可选首帧', value: 'startFrameOptional' },
   { label: '可选尾帧', value: 'endFrameOptional' },
@@ -1368,10 +1403,6 @@ const onModesSelectChange = (model: ProviderModel, next: unknown) => {
   if (Array.isArray(next)) {
     setModesFromSelect(model, next.filter((v): v is string => typeof v === 'string'))
   }
-}
-
-const modeSelectChangeHandler = (model: ProviderModel) => (next: unknown) => {
-  onModesSelectChange(model, next)
 }
 
 const addDurationResolutionRow = (model: ProviderModel) => {
@@ -1624,6 +1655,17 @@ const reloadProviderCode = async () => {
   }
 }
 
+const openProviderCodeEditor = () => {
+  providerCodeEditorDraft.value = providerForm.code
+  providerCodeEditorVisible.value = true
+}
+
+const syncProviderCodeEditorDraft = () => {
+  providerForm.code = providerCodeEditorDraft.value
+  providerCodeEditorVisible.value = false
+  ElMessage.success('源码已同步到源码框')
+}
+
 const ALLOWED_ICON_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/svg+xml']
 const MAX_ICON_BYTES = 1 * 1024 * 1024
 const iconInputRef = ref<HTMLInputElement | null>(null)
@@ -1814,12 +1856,12 @@ const buildProviderPayload = () => {
   }
 }
 
-const saveProviderCode = async () => {
-  if (!providerEditingKey.value) return
+const saveProviderCode = async (): Promise<boolean> => {
+  if (!providerEditingKey.value) return false
   const code = providerForm.code.trim()
   if (!code) {
     ElMessage.warning('源码不能为空')
-    return
+    return false
   }
   providerCodeSaving.value = true
   try {
@@ -1827,11 +1869,24 @@ const saveProviderCode = async () => {
     fillProviderFormFromRecord(data.config, data.code)
     await loadProviders()
     ElMessage.success('源码已保存')
+    return true
   } catch (error) {
     ElMessage.error(getErrorMessage(error))
+    return false
   } finally {
     providerCodeSaving.value = false
   }
+}
+
+const saveProviderCodeEditor = async () => {
+  providerForm.code = providerCodeEditorDraft.value
+  if (providerDialogMode.value === 'create') {
+    syncProviderCodeEditorDraft()
+    return
+  }
+
+  const saved = await saveProviderCode()
+  if (saved) providerCodeEditorVisible.value = false
 }
 
 const saveProvider = async () => {
@@ -1950,6 +2005,10 @@ watch(activeKey, (val) => {
   if (val === 'providers' && providers.value.length === 0) {
     void loadProviders()
   }
+})
+
+watch(providerDialogVisible, (val) => {
+  if (!val) providerCodeEditorVisible.value = false
 })
 </script>
 
@@ -3364,6 +3423,10 @@ watch(activeKey, (val) => {
 .settings-dark-dialog .el-button--danger:hover {
   background-color: #b91c1c;
   border-color: #b91c1c;
+}
+
+.provider-code-web-dialog .el-dialog__body {
+  overflow: hidden;
 }
 
 /* messagebox */

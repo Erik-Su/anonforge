@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"vue-codemirror": "^6.1.1",
+		"codemirror": "^6.0.2",
+		"@codemirror/lang-python": "^6.2.1",
+		"@codemirror/theme-one-dark": "^6.1.3"
+	}
+}
