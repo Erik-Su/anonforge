@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from typing import Annotated, NoReturn
 
-from fastapi import Depends, HTTPException, Response, status
+from fastapi import Depends, File, HTTPException, Request, Response, UploadFile, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.database import get_session
-from app.models.user import User
 from app.routers.base import BaseView, route
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import (
+    UserAvatarUpdate,
+    UserCreate,
+    UserPasswordUpdate,
+    UserProfileUpdate,
+    UserRead,
+    UserUpdate,
+)
+from app.models.user import User
 from app.services import user as user_service
 from app.schemas.user import LoginUserInfo, UserLogin, UserLoginResponse
 from app.utils.jwt_tools import create_login_tokens
@@ -17,12 +24,29 @@ from app.middlewares import common
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
+USER_ROUTE_MIDDLEWARES = [
+    Depends(common.jwt_auth_middleware),
+    Depends(common.request_duration_middleware),
+]
+
 
 class UserView(BaseView):
     """用户类视图。"""
 
     router_prefix = "/users"
     router_tags = ["user"]
+
+    @staticmethod
+    def _current_user_public_id(request: Request) -> str:
+        """从已认证请求中读取当前用户公开标识。"""
+        public_id = getattr(request.state, "current_user_public_id", None)
+        if not public_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="请提供 access token",
+                headers=common.BEARER_AUTH_HEADER,
+            )
+        return str(public_id)
 
     @staticmethod
     def _raise_as_http(exc: Exception) -> NoReturn:
@@ -40,6 +64,10 @@ class UserView(BaseView):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         if isinstance(exc, user_service.UserEmailConflictError):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        if isinstance(exc, user_service.UserPasswordMismatchError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        if isinstance(exc, user_service.UserAvatarInvalidError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         raise exc
 
     @route(
@@ -60,6 +88,106 @@ class UserView(BaseView):
             list[UserRead]: 用户列表结果。
         """
         return await user_service.list_users(session)
+
+    @route(
+        "/me",
+        methods=["GET"],
+        response_model=UserRead,
+        summary="获取当前登录用户",
+        middlewares=USER_ROUTE_MIDDLEWARES,
+        description="根据 access token 返回当前登录用户资料，用于设置页初始化。",
+    )
+    async def get_current_user(self, request: Request, session: SessionDep) -> User:
+        """获取当前登录用户资料。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await user_service.get_current_user(session, current_user_public_id)
+        except user_service.UserServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/me/profile",
+        methods=["PUT"],
+        response_model=UserRead,
+        summary="更新当前用户资料",
+        middlewares=USER_ROUTE_MIDDLEWARES,
+        description="更新当前登录用户的账号、昵称和邮箱。",
+    )
+    async def update_current_user_profile(
+        self,
+        payload: UserProfileUpdate,
+        request: Request,
+        session: SessionDep,
+    ) -> User:
+        """更新当前登录用户基础资料。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await user_service.update_current_user_profile(session, current_user_public_id, payload)
+        except user_service.UserServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/me/password",
+        methods=["PUT"],
+        response_model=UserRead,
+        summary="修改当前用户密码",
+        middlewares=USER_ROUTE_MIDDLEWARES,
+        description="校验当前密码后更新当前登录用户密码。",
+    )
+    async def update_current_user_password(
+        self,
+        payload: UserPasswordUpdate,
+        request: Request,
+        session: SessionDep,
+    ) -> User:
+        """修改当前登录用户密码。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await user_service.update_current_user_password(session, current_user_public_id, payload)
+        except user_service.UserServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/me/avatar",
+        methods=["PUT"],
+        response_model=UserRead,
+        summary="更新当前用户头像",
+        middlewares=USER_ROUTE_MIDDLEWARES,
+        description="更新当前登录用户头像地址。",
+    )
+    async def update_current_user_avatar(
+        self,
+        payload: UserAvatarUpdate,
+        request: Request,
+        session: SessionDep,
+    ) -> User:
+        """更新当前登录用户头像。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await user_service.update_current_user_avatar(session, current_user_public_id, payload)
+        except user_service.UserServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/me/avatar/upload",
+        methods=["POST"],
+        response_model=UserRead,
+        summary="上传当前用户头像图片",
+        middlewares=USER_ROUTE_MIDDLEWARES,
+        description="接收 PNG/JPEG/JPG 图片文件，中心裁剪为 1:1 比例并写回当前用户头像。",
+    )
+    async def upload_current_user_avatar(
+        self,
+        request: Request,
+        session: SessionDep,
+        file: UploadFile = File(..., description="待上传的头像图片，支持 PNG/JPEG/JPG。"),
+    ) -> User:
+        """上传并裁剪当前登录用户头像。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await user_service.upload_current_user_avatar(session, current_user_public_id, file)
+        except user_service.UserServiceError as exc:
+            self._raise_as_http(exc)
 
     @route(
         "/{public_id}",

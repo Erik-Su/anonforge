@@ -26,7 +26,7 @@
           </el-tooltip>
 
           <el-tooltip content="设置" placement="right">
-            <button class="nav-btn" aria-label="设置" @click="showComingSoon">
+            <button class="nav-btn" aria-label="设置" @click="settingsVisible = true">
               <el-icon><Setting /></el-icon>
             </button>
           </el-tooltip>
@@ -346,24 +346,42 @@
                 <span class="panel-card__hint">{{ activeDirectorStyleLabel || '未选择' }}</span>
               </header>
               <el-form-item prop="director_manual" class="panel-card__field">
-                <div class="director-grid">
+                <div
+                  v-loading="directorStylesLoading"
+                  class="director-grid"
+                  element-loading-background="rgba(13, 17, 23, 0.55)"
+                >
+                  <el-empty
+                    v-if="!directorStylesLoading && directorStylePresets.length === 0"
+                    class="style-empty"
+                    description="暂无导演风格"
+                  />
                   <button
                     v-for="preset in directorStylePresets"
-                    :key="preset.label"
+                    v-else
+                    :key="preset.manual_path"
                     type="button"
                     class="director-card"
-                    :class="{ 'is-active': projectForm.director_manual === preset.text }"
-                    @click="projectForm.director_manual = preset.text"
+                    :class="{ 'is-active': projectForm.director_manual === preset.manual_path }"
+                    @click="projectForm.director_manual = preset.manual_path"
                   >
                     <span
                       class="director-card__image"
-                      :style="{ backgroundImage: preset.gradient }"
-                    >
-                      <span class="director-card__placeholder" aria-hidden="true">
-                        <el-icon><Picture /></el-icon>
-                      </span>
-                    </span>
+                      :style="{ backgroundImage: getDirectorStyleBackground(preset) }"
+                    ></span>
                     <span class="director-card__overlay"></span>
+                    <span
+                      class="director-card__zoom"
+                      role="button"
+                      tabindex="0"
+                      aria-label="预览图片"
+                      title="预览图片"
+                      @click.stop="openDirectorPreview(preset)"
+                      @keydown.enter.stop.prevent="openDirectorPreview(preset)"
+                      @keydown.space.stop.prevent="openDirectorPreview(preset)"
+                    >
+                      <el-icon><ZoomIn /></el-icon>
+                    </span>
                     <span
                       class="director-card__edit"
                       role="button"
@@ -377,8 +395,8 @@
                       <el-icon><EditPen /></el-icon>
                     </span>
                     <span class="director-card__text">
-                      <strong class="director-card__title">{{ preset.label }}</strong>
-                      <em class="director-card__subtitle">{{ preset.text }}</em>
+                      <strong class="director-card__title">{{ preset.manual_path }}</strong>
+                      <em class="director-card__subtitle">{{ preset.name }}</em>
                     </span>
                   </button>
                 </div>
@@ -491,6 +509,8 @@
       teleported
       @close="previewVisible = false"
     />
+
+    <Settings v-model="settingsVisible" />
   </main>
 </template>
 
@@ -507,7 +527,6 @@ import {
   EditPen,
   Folder,
   List,
-  Picture,
   Plus,
   Search,
   Setting,
@@ -521,6 +540,7 @@ import {
   disableProjectApi,
   enableProjectApi,
   inviteProjectMemberApi,
+  listDirectorManualsApi,
   listProjectMembersApi,
   listProjectsApi,
   listVisualStylesApi,
@@ -529,6 +549,7 @@ import {
   searchProjectsByNameApi,
   updateProjectApi,
   updateProjectMemberRoleApi,
+  type DirectorManualRecord,
   type ProjectMemberRecord,
   type ProjectMemberRole,
   type ProjectPayload,
@@ -538,6 +559,7 @@ import {
   type VisualStyleImageRecord,
   type VisualStyleRecord,
 } from '@/api/project'
+import Settings from '../components/Settings.vue'
 
 type ProjectDialogMode = 'create' | 'edit'
 
@@ -547,7 +569,11 @@ interface ArtStylePreset {
   images: VisualStyleRecord['images']
 }
 
-const DEFAULT_ART_STYLE = ''
+interface DirectorStylePreset {
+  manual_path: string
+  name: string
+  images: DirectorManualRecord['images']
+}
 
 const router = useRouter()
 const projectFormRef = ref<FormInstance>()
@@ -572,6 +598,9 @@ const candidates = ref<UserRecord[]>([])
 const candidatesLoading = ref(false)
 const inviteRole = ref<ProjectMemberRole>('editor')
 const artStylesLoading = ref(false)
+const directorStylesLoading = ref(false)
+
+const settingsVisible = ref(false)
 
 const previewVisible = ref(false)
 const previewUrls = ref<string[]>([])
@@ -582,7 +611,7 @@ const projectForm = reactive<ProjectPayload>({
   intro: '',
   project_type: 'novel',
   content_type: '',
-  art_style: DEFAULT_ART_STYLE,
+  art_style: '',
   director_manual: '',
   video_ratio: '9:16',
   image_model: '',
@@ -669,16 +698,7 @@ const videoModelPresets = [
   },
 ] as const
 
-const directorStylePresets = [
-  { label: '喜剧搞笑', text: '# 喜剧搞笑类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)' },
-  { label: '青春成长', text: '# 青春成长类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0e7490 100%)' },
-  { label: '家庭温情', text: '# 家庭温情类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #f472b6 0%, #be185d 100%)' },
-  { label: '历史史诗', text: '# 历史史诗类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #a16207 0%, #44403c 100%)' },
-  { label: '恐怖灵异', text: '# 恐怖灵异类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #6d28d9 0%, #1e1b4b 100%)' },
-  { label: '热血少年', text: '# 热血少年类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)' },
-  { label: '悬疑推理', text: '# 悬疑推理类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #475569 0%, #0f172a 100%)' },
-  { label: '心理博弈', text: '# 心理博弈类型 · 导演叙事风格', gradient: 'linear-gradient(135deg, #6366f1 0%, #312e81 100%)' },
-] as const
+const directorStylePresets = ref<DirectorStylePreset[]>([])
 
 const toArtStylePreset = (style: VisualStyleRecord): ArtStylePreset => ({
   style_path: style.style_path,
@@ -686,11 +706,15 @@ const toArtStylePreset = (style: VisualStyleRecord): ArtStylePreset => ({
   images: style.images,
 })
 
+const toDirectorStylePreset = (manual: DirectorManualRecord): DirectorStylePreset => ({
+  manual_path: manual.manual_path,
+  name: manual.name,
+  images: manual.images,
+})
+
 const getArtStyleLabel = (value: string) => (
   artStylePresets.value.find((item) => item.style_path === value)?.style_path ?? ''
 )
-
-const getDefaultArtStyle = () => artStylePresets.value[2]?.style_path ?? DEFAULT_ART_STYLE
 
 const getArtStyleImageUrl = (preset: ArtStylePreset) => {
   const imageUrl = preset.images[2]?.url ?? preset.images[2]?.path ?? ''
@@ -719,17 +743,35 @@ const openStylePreview = (preset: ArtStylePreset) => {
   previewVisible.value = true
 }
 
-const ensureArtStyleOption = (value: string) => {
-  if (!value || artStylePresets.value.some((item) => item.style_path === value)) return
+const getDirectorStyleLabel = (value: string) => (
+  directorStylePresets.value.find((item) => item.manual_path === value)?.manual_path ?? ''
+)
 
-  artStylePresets.value = [
-    {
-      style_path: value,
-      name: '当前项目已保存的视觉风格',
-      images: [],
-    },
-    ...artStylePresets.value,
-  ]
+const getDirectorStyleImageUrl = (preset: DirectorStylePreset) => {
+  const imageUrl = preset.images[0]?.url ?? preset.images[0]?.path ?? ''
+  return /^(?:https?:|data:|\/)/.test(imageUrl) ? imageUrl : ''
+}
+
+const getDirectorStyleBackground = (preset: DirectorStylePreset) => {
+  const imageUrl = getDirectorStyleImageUrl(preset)
+  return imageUrl ? `url("${imageUrl}")` : 'linear-gradient(135deg, #475569, #1e293b)'
+}
+
+const getDirectorStyleAllImageUrls = (preset: DirectorStylePreset): string[] => {
+  return preset.images
+    .map((image: DirectorManualRecord['images'][number]) => image.url ?? image.path ?? '')
+    .filter((url: string) => /^(?:https?:|data:|\/)/.test(url))
+}
+
+const openDirectorPreview = (preset: DirectorStylePreset) => {
+  const urls = getDirectorStyleAllImageUrls(preset)
+  if (urls.length === 0) {
+    ElMessage.warning('暂无可预览的图片')
+    return
+  }
+  previewUrls.value = urls
+  previewIndex.value = 0
+  previewVisible.value = true
 }
 
 const activeArtStyleLabel = computed(
@@ -737,7 +779,7 @@ const activeArtStyleLabel = computed(
 )
 
 const activeDirectorStyleLabel = computed(
-  () => directorStylePresets.find((item) => item.text === projectForm.director_manual)?.label ?? '',
+  () => getDirectorStyleLabel(projectForm.director_manual),
 )
 
 const projectRules: FormRules<ProjectPayload> = {
@@ -790,18 +832,24 @@ const loadVisualStyles = async () => {
   try {
     const { data } = await listVisualStylesApi()
     artStylePresets.value = data.map(toArtStylePreset)
-    if (
-      projectDialogMode.value === 'create'
-      && artStylePresets.value.length > 0
-      && !artStylePresets.value.some((item) => item.style_path === projectForm.art_style)
-    ) {
-      projectForm.art_style = getDefaultArtStyle()
-    }
   } catch (error) {
     artStylePresets.value = []
     ElMessage.error(getErrorMessage(error))
   } finally {
     artStylesLoading.value = false
+  }
+}
+
+const loadDirectorManuals = async () => {
+  directorStylesLoading.value = true
+  try {
+    const { data } = await listDirectorManualsApi()
+    directorStylePresets.value = data.map(toDirectorStylePreset)
+  } catch (error) {
+    directorStylePresets.value = []
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    directorStylesLoading.value = false
   }
 }
 
@@ -816,7 +864,6 @@ const openEditDialog = (project: ProjectRecord) => {
   projectDialogMode.value = 'edit'
   editingProjectPublicId.value = project.public_id
   Object.assign(projectForm, pickProjectPayload(project))
-  ensureArtStyleOption(project.art_style)
   projectDialogVisible.value = true
 }
 
@@ -978,7 +1025,7 @@ const resetProjectForm = () => {
     intro: '',
     project_type: 'novel',
     content_type: '',
-    art_style: getDefaultArtStyle(),
+    art_style: '',
     director_manual: '',
     video_ratio: '9:16',
     image_model: '',
@@ -1037,6 +1084,7 @@ const showComingSoon = () => {
 onMounted(() => {
   void loadProjects()
   void loadVisualStyles()
+  void loadDirectorManuals()
 })
 </script>
 
@@ -2307,26 +2355,6 @@ onMounted(() => {
   transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.3s ease;
 }
 
-.project-dark-dialog .director-card__placeholder {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px dashed rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  margin-bottom: 28px;
-  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
-}
-
-.project-dark-dialog .director-card__placeholder .el-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
 .project-dark-dialog .director-card__overlay {
   position: absolute;
   inset: 0;
@@ -2346,13 +2374,6 @@ onMounted(() => {
 .project-dark-dialog .director-card:hover .director-card__image {
   transform: scale(1.06);
   filter: saturate(1.08) brightness(1.04);
-}
-
-.project-dark-dialog .director-card:hover .director-card__placeholder {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: scale(1.04);
 }
 
 .project-dark-dialog .director-card:focus-visible {
@@ -2377,10 +2398,10 @@ onMounted(() => {
     linear-gradient(180deg, rgba(37, 99, 235, 0.22) 0%, rgba(37, 99, 235, 0) 60%);
 }
 
+.project-dark-dialog .director-card__zoom,
 .project-dark-dialog .director-card__edit {
   position: absolute;
   top: 10px;
-  right: 10px;
   z-index: 3;
   width: 28px;
   height: 28px;
@@ -2399,15 +2420,31 @@ onMounted(() => {
   transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.project-dark-dialog .director-card__zoom { left: 10px; }
+.project-dark-dialog .director-card__edit { right: 10px; }
+
+.project-dark-dialog .director-card__zoom .el-icon,
 .project-dark-dialog .director-card__edit .el-icon {
   font-size: 14px;
   line-height: 1;
 }
 
+.project-dark-dialog .director-card:hover .director-card__zoom,
 .project-dark-dialog .director-card:hover .director-card__edit,
+.project-dark-dialog .director-card:focus-within .director-card__zoom,
 .project-dark-dialog .director-card:focus-within .director-card__edit {
   opacity: 1;
   transform: translateY(0);
+}
+
+.project-dark-dialog .director-card__zoom:hover,
+.project-dark-dialog .director-card__zoom:focus-visible {
+  outline: none;
+  background: rgba(15, 20, 28, 0.78);
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.18),
+    0 6px 14px rgba(0, 0, 0, 0.4);
 }
 
 .project-dark-dialog .director-card__edit:hover,

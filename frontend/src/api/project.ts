@@ -136,3 +136,25 @@ export const updateProjectMemberRoleApi = (
 export const removeProjectMemberApi = (publicId: string, userPublicId: string) => (
   request.delete(`/projects/${publicId}/members/${userPublicId}`)
 )
+
+export interface DirectorManualFileRecord {
+  path: string
+  content: string
+  size_bytes: number
+}
+
+export interface DirectorManualImageRecord {
+  filename: string
+  path: string
+  url: string
+  size_bytes: number
+}
+
+export interface DirectorManualRecord {
+  manual_path: string
+  name: string
+  files: DirectorManualFileRecord[]
+  images: DirectorManualImageRecord[]
+}
+
+export const listDirectorManualsApi = () => request.get<DirectorManualRecord[]>('/projects/director-manuals')

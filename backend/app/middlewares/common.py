@@ -10,10 +10,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.utils.jwt_tools import decode_token
 
-
 BEARER_AUTH_HEADER = {"WWW-Authenticate": "Bearer"}
 http_bearer = HTTPBearer(auto_error=False)
-
 
 async def request_duration_middleware(request: Request) -> AsyncGenerator[None, None]:
     """记录当前请求的处理耗时。
@@ -26,7 +24,7 @@ async def request_duration_middleware(request: Request) -> AsyncGenerator[None, 
     """
     start_time = perf_counter()
     try:
-        yield
+        yield  # 此处不再执行当前中间件，进入下一个中间件或者视图
     finally:
         duration_ms = round((perf_counter() - start_time) * 1000, 3)
         request.state.request_duration_ms = duration_ms
@@ -56,7 +54,7 @@ async def jwt_auth_middleware(
         )
 
     try:
-        payload = await decode_token(credentials.credentials)
+        payload = await decode_token(credentials.credentials, refresh_access_ttl=True)
     except (jwt.PyJWTError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

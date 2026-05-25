@@ -63,5 +63,11 @@ class Settings(object):
     visual_style_root: str = field(default_factory=lambda: os.getenv("VISUAL_STYLE_ROOT", "./data/skills/art_list"))
     director_manual_root: str = field(default_factory=lambda: os.getenv("DIRECTOR_MANUAL_ROOT", "./data/skills/director_manual"))
 
-
 settings = Settings()
+
+
+def oss_root_path() -> Path:
+    """返回 OSS 本地根目录，配置为相对路径时按工程根目录解析。"""
+    configured = Path(settings.oss_root).expanduser()
+    root = configured if configured.is_absolute() else BASE_DIR / configured
+    return root.resolve()

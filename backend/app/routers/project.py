@@ -24,6 +24,12 @@ from app.schemas.project import (
     VisualStyleImageWrite,
     VisualStyleRead,
     VisualStyleUpdate,
+    DirectorManualCreate,
+    DirectorManualFileRead,
+    DirectorManualFileWrite,
+    DirectorManualImageRead,
+    DirectorManualImageWrite,
+    DirectorManualRead,
 )
 from app.schemas.user import UserRead
 from app.services import project as project_service
@@ -65,6 +71,12 @@ class ProjectView(BaseView):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
         if isinstance(exc, project_service.ProjectMemberConflictError):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        if isinstance(exc, project_service.DirectorManualNotFoundError):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        if isinstance(exc, project_service.DirectorManualConflictError):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        if isinstance(exc, project_service.DirectorManualValidationError):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         raise exc
 
     @route(
@@ -664,6 +676,192 @@ class ProjectView(BaseView):
         """删除视觉风格图片。"""
         try:
             await project_service.delete_visual_style_image(session, style_path, filename)
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @route(
+        "/director-manuals",
+        methods=["GET"],
+        response_model=list[DirectorManualRead],
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="获取导演风格列表",
+        description="读取配置的导演手册根目录，返回可供客户端选择的导演叙事风格列表。",
+    )
+    async def list_director_manuals(self, request: Request, session: SessionDep) -> list[DirectorManualRead]:
+        """获取导演风格列表。"""
+        try:
+            return await project_service.list_director_manuals(session)
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals",
+        methods=["POST"],
+        response_model=DirectorManualRead,
+        status_code=status.HTTP_201_CREATED,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="创建导演风格",
+        description="创建导演手册目录并写入 Markdown 文件和图片；仅超级管理员可操作。",
+    )
+    async def create_director_manual(
+        self,
+        payload: DirectorManualCreate,
+        request: Request,
+        session: SessionDep,
+    ) -> DirectorManualRead:
+        """创建导演风格。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            return await project_service.create_director_manual(
+                session,
+                current_user_public_id,
+                payload,
+            )
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals/{manual_path}/files/{file_path:path}",
+        methods=["GET"],
+        response_model=DirectorManualFileRead,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="读取导演手册文件",
+        description="读取导演手册目录中的单个 Markdown 文件。",
+    )
+    async def read_director_manual_file(
+        self,
+        manual_path: str,
+        file_path: str,
+        request: Request,
+        session: SessionDep,
+    ) -> DirectorManualFileRead:
+        """读取导演手册文件。"""
+        try:
+            return await project_service.read_director_manual_file(session, manual_path, file_path)
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals/{manual_path}/files/{file_path:path}",
+        methods=["PUT"],
+        response_model=DirectorManualFileRead,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="写入导演手册文件",
+        description="新增或覆盖导演手册目录中的单个 Markdown 文件。",
+    )
+    async def write_director_manual_file(
+        self,
+        manual_path: str,
+        file_path: str,
+        payload: DirectorManualFileWrite,
+        request: Request,
+        session: SessionDep,
+    ) -> DirectorManualFileRead:
+        """写入导演手册文件。"""
+        try:
+            file_payload = payload.model_copy(update={"path": file_path})
+            return await project_service.write_director_manual_file(session, manual_path, file_payload)
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals/{manual_path}/files/{file_path:path}",
+        methods=["DELETE"],
+        status_code=status.HTTP_204_NO_CONTENT,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="删除导演手册文件",
+        description="删除导演手册目录中的单个 Markdown 文件；需要管理员权限。",
+    )
+    async def delete_director_manual_file(
+        self,
+        manual_path: str,
+        file_path: str,
+        request: Request,
+        session: SessionDep,
+    ) -> Response:
+        """删除导演手册文件。"""
+        current_user_public_id = self._current_user_public_id(request)
+        try:
+            await project_service.delete_director_manual_file(
+                session,
+                current_user_public_id,
+                manual_path,
+                file_path,
+            )
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @route(
+        "/director-manuals/{manual_path}/images/{filename}",
+        methods=["GET"],
+        summary="读取导演风格图片",
+        description="读取导演手册目录 images 子目录中的单个图片，可用于 CSS url() 或 HTML src 直接访问。",
+    )
+    async def get_director_manual_image(
+        self,
+        manual_path: str,
+        filename: str,
+        request: Request,
+        session: SessionDep,
+    ) -> FileResponse:
+        """读取导演风格图片。"""
+        try:
+            image_path = await project_service.get_director_manual_image_path(
+                session,
+                manual_path,
+                filename,
+            )
+            return FileResponse(image_path, filename=filename)
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals/{manual_path}/images/{filename}",
+        methods=["PUT"],
+        response_model=DirectorManualImageRead,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="写入导演手册图片",
+        description="新增或覆盖导演手册目录 images 子目录中的单个图片。",
+    )
+    async def write_director_manual_image(
+        self,
+        manual_path: str,
+        filename: str,
+        payload: DirectorManualImageWrite,
+        request: Request,
+        session: SessionDep,
+    ) -> DirectorManualImageRead:
+        """写入导演手册图片。"""
+        try:
+            image_payload = payload.model_copy(update={"filename": filename})
+            return await project_service.write_director_manual_image(
+                session,
+                manual_path,
+                image_payload,
+            )
+        except project_service.ProjectServiceError as exc:
+            self._raise_as_http(exc)
+
+    @route(
+        "/director-manuals/{manual_path}/images/{filename}",
+        methods=["DELETE"],
+        status_code=status.HTTP_204_NO_CONTENT,
+        middlewares=PROJECT_ROUTE_MIDDLEWARES,
+        summary="删除导演手册图片",
+        description="删除导演手册目录 images 子目录中的单个图片。",
+    )
+    async def delete_director_manual_image(
+        self,
+        manual_path: str,
+        filename: str,
+        request: Request,
+        session: SessionDep,
+    ) -> Response:
+        """删除导演手册图片。"""
+        try:
+            await project_service.delete_director_manual_image(session, manual_path, filename)
         except project_service.ProjectServiceError as exc:
             self._raise_as_http(exc)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
