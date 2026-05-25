@@ -19,15 +19,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import BASE_DIR, settings
 from app.models.project import Project, ProjectMember, ProjectMemberRole
 from app.models.user import User
+from app.schemas.project import ProjectCreate, ProjectMemberRead, ProjectUpdate
+from app.utils.time_tools import utc_now
 from app.schemas.project import (
-    DirectorManualCreate,
     DirectorManualFileRead,
     DirectorManualFileWrite,
     DirectorManualImageRead,
     DirectorManualImageWrite,
     DirectorManualRead,
     ProjectCreate,
-    ProjectMemberRead,
     ProjectUpdate,
     VisualStyleCreate,
     VisualStyleFileRead,
@@ -36,8 +36,8 @@ from app.schemas.project import (
     VisualStyleImageWrite,
     VisualStyleRead,
     VisualStyleUpdate,
+    DirectorManualCreate,
 )
-from app.utils.time_tools import utc_now
 
 STYLE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -218,25 +218,25 @@ async def create_project(session: AsyncSession, owner_public_id: str, payload: P
     await _get_current_user_or_raise(session, owner_public_id)
 
     now = utc_now()
-    project = Project.model_validate({
+    project = Project(
         **payload.model_dump(),
-        "owner_id": owner_public_id,
-        "disabled_at": None,
-        "created_at": now,
-        "updated_at": now,
-    })
+        owner_id=owner_public_id,  # type: ignore[call-arg]
+        disabled_at=None,
+        created_at=now,
+        updated_at=now,
+    )
     session.add(project)
     await session.flush()
 
     if project.id is None:
         raise ProjectServiceError("Project id was not generated")
 
-    owner_member = ProjectMember.model_validate({
-        "project_id": project.id,
-        "user_public_id": owner_public_id,
-        "role": ProjectMemberRole.OWNER,
-        "joined_at": now,
-    })
+    owner_member = ProjectMember(
+        project_id=project.id,
+        user_public_id=owner_public_id,
+        role=ProjectMemberRole.OWNER,
+        joined_at=now,
+    )
     session.add(owner_member)
     await session.commit()
     await session.refresh(project)
@@ -381,12 +381,12 @@ async def add_project_member(
     if existing_member is not None:
         raise ProjectMemberConflictError("Project member already exists")
 
-    member = ProjectMember.model_validate({
-        "project_id": project.id,
-        "user_public_id": user_public_id,
-        "role": role,
-        "joined_at": utc_now(),
-    })
+    member = ProjectMember(
+        project_id=project.id,
+        user_public_id=user_public_id,
+        role=role,
+        joined_at=utc_now(),
+    )
     session.add(member)
     await session.commit()
     await session.refresh(member)

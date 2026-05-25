@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Integer, String, func
 from sqlmodel import Field, SQLModel
 
 from app.models.base import BaseModel
@@ -16,6 +15,7 @@ class ProjectVideoMode(str, Enum):
 
     TEXT = "text"
     SINGLE_IMAGE = "singleImage"
+    MULTI_REFERENCE = "multiReference"
     START_END_REQUIRED = "startEndRequired"
     END_FRAME_OPTIONAL = "endFrameOptional"
     START_FRAME_OPTIONAL = "startFrameOptional"
@@ -39,7 +39,7 @@ def enum_values(enum_cls: type[Enum]) -> list[str]:
 class Project(BaseModel, table=True):
     """项目主表模型。"""
 
-    __tablename__: ClassVar[str] = "af_project"
+    __tablename__ = "af_project"  # type: ignore[assignment]
 
     name: str = Field(
         sa_column=Column("name", String(100), nullable=False, index=True),
@@ -47,47 +47,93 @@ class Project(BaseModel, table=True):
     )
     intro: str = Field(
         default="",
-        sa_column=Column("intro", String(2000), nullable=False, default=""),
+        sa_column=Column("intro", String(2000), nullable=False, default="", server_default=""),
         description="项目简介或内容摘要。",
     )
     project_type: str = Field(
         default="novel_to_video",
-        sa_column=Column("project_type", String(50), nullable=False, default="novel_to_video"),
+        sa_column=Column(
+            "project_type",
+            String(50),
+            nullable=False,
+            default="novel_to_video",
+            server_default="novel_to_video",
+        ),
         description="项目业务类型，例如小说转视频。",
     )
     content_type: str = Field(
         default="novel",
-        sa_column=Column("content_type", String(50), nullable=False, default="novel"),
+        sa_column=Column(
+            "content_type",
+            String(50),
+            nullable=False,
+            default="novel",
+            server_default="novel",
+        ),
         description="项目源内容类型。",
     )
     art_style: str = Field(
         default="3D_chinese_traditional",
-        sa_column=Column("art_style", String(100), nullable=False, default="3D_chinese_traditional"),
+        sa_column=Column(
+            "art_style",
+            String(100),
+            nullable=False,
+            default="3D_chinese_traditional",
+            server_default="3D_chinese_traditional",
+        ),
         description="视觉风格。",
     )
     director_manual: str = Field(
         default="",
-        sa_column=Column("director_manual", String(4000), nullable=False, default=""),
+        sa_column=Column(
+            "director_manual",
+            String(4000),
+            nullable=False,
+            default="",
+            server_default="",
+        ),
         description="导演技能。",
     )
     video_ratio: str = Field(
         default="9:16",
-        sa_column=Column("video_ratio", String(20), nullable=False, default="9:16"),
+        sa_column=Column(
+            "video_ratio",
+            String(20),
+            nullable=False,
+            default="9:16",
+            server_default="9:16",
+        ),
         description="默认视频画幅比例。",
+    )
+    text_model: str = Field(
+        default="",
+        sa_column=Column("text_model", String(100), nullable=False, default="", server_default=""),
+        description="默认文本生成模型。",
     )
     image_model: str = Field(
         default="",
-        sa_column=Column("image_model", String(100), nullable=False, default=""),
+        sa_column=Column("image_model", String(100), nullable=False, default="", server_default=""),
         description="默认图像生成模型。",
     )
     video_model: str = Field(
         default="",
-        sa_column=Column("video_model", String(100), nullable=False, default=""),
+        sa_column=Column("video_model", String(100), nullable=False, default="", server_default=""),
         description="默认视频生成模型。",
+    )
+    tts_model: str = Field(
+        default="",
+        sa_column=Column("tts_model", String(100), nullable=False, default="", server_default=""),
+        description="默认语音生成模型。",
     )
     image_quality: str = Field(
         default="standard",
-        sa_column=Column("image_quality", String(50), nullable=False, default="standard"),
+        sa_column=Column(
+            "image_quality",
+            String(50),
+            nullable=False,
+            default="standard",
+            server_default="standard",
+        ),
         description="默认图像质量档位。",
     )
     mode: ProjectVideoMode = Field(
@@ -105,6 +151,7 @@ class Project(BaseModel, table=True):
             ),
             nullable=False,
             default=ProjectVideoMode.TEXT.value,
+            server_default=ProjectVideoMode.TEXT.value,
         ),
         description="视频生成模式。",
     )
@@ -117,7 +164,7 @@ class Project(BaseModel, table=True):
 class ProjectMember(SQLModel, table=True):
     """项目成员表模型。"""
 
-    __tablename__: ClassVar[str] = "af_project_member"
+    __tablename__ = "af_project_member"  # type: ignore[assignment]
 
     id: int | None = Field(
         default=None,
@@ -146,11 +193,18 @@ class ProjectMember(SQLModel, table=True):
             ),
             nullable=False,
             default=ProjectMemberRole.VIEWER.value,
+            server_default=ProjectMemberRole.VIEWER.value,
         ),
         description="成员在项目中的角色。",
     )
     joined_at: datetime = Field(
         default_factory=utc_now,
-        sa_column=Column("joined_at", DateTime(timezone=True), nullable=False, default=utc_now),
+        sa_column=Column(
+            "joined_at",
+            DateTime(timezone=True),
+            nullable=False,
+            default=utc_now,
+            server_default=func.now(),
+        ),
         description="成员加入项目时间。",
     )
