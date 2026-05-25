@@ -1,20 +1,18 @@
 fastapi
 uvicorn[standard]
 sqlmodel
-pydantic
+aiosqlite
+psycopg[binary]
 pillow
+python-multipart
+
 httpx
 crewai
+langgraph
+langchain-openai
 
-# testing
 pytest
-pytest-asyncio
-aiosqlite
-
-#database
 alembic
-psycopg[binary]
 redis
-
-PyJWT
 bcrypt
+PyJWT
